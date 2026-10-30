@@ -58,6 +58,18 @@ class BunnyStreamProvider extends BaseObject implements ListableStreamProviderIn
         return self::NAME;
     }
 
+    #[Override]
+    public function getLabel(): string
+    {
+        return 'Bunny Stream';
+    }
+
+    #[Override]
+    public function getDashboardUrl(StreamState $state): ?string
+    {
+        return $state->id !== null ? "https://dash.bunny.net/stream/$this->libraryId/library/videos?vid=$state->id" : null;
+    }
+
     /**
      * The library: a database copied to another installation keeps the video ids of the library it came from.
      */

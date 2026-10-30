@@ -48,6 +48,15 @@ class BunnyStreamProviderTest extends TestCase
         parent::tearDown();
     }
 
+    public function testTheDashboardLinksTheVideoInItsLibrary(): void
+    {
+        $provider = $this->createProvider();
+
+        self::assertSame('Bunny Stream', $provider->getLabel());
+        self::assertSame('https://dash.bunny.net/stream/42/library/videos?vid=' . self::GUID, $provider->getDashboardUrl($this->createState()));
+        self::assertNull($provider->getDashboardUrl(new StreamState(BunnyStreamProvider::NAME, null)));
+    }
+
     public function testTheScopeIsTheLibrary(): void
     {
         self::assertSame('42', $this->createProvider()->getScope());
