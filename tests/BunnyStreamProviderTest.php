@@ -30,9 +30,9 @@ class BunnyStreamProviderTest extends TestCase
     private const string GUID = '3f2a8c1e-5b7d-4e9a-8c2f-1a6b9d0e4f7c';
 
     /**
-     * @var list<array{request: RequestInterface}>
+     * @var list<RequestInterface>
      */
-    private array $history = [];
+    private array $requests = [];
 
     #[Override]
     protected function setUp(): void
@@ -249,7 +249,7 @@ class BunnyStreamProviderTest extends TestCase
 
         self::assertSame('vz-1.b-cdn.net', $provider->provision('account-key', 'Test', '')['bunnyStreamCdnHost']);
         self::assertSame(['Name' => 'Test'], $this->getJson($this->getRequest(0)));
-        self::assertCount(2, $this->history);
+        self::assertCount(2, $this->requests);
     }
 
     public function testProvisionNamesTheLibraryItCouldNotFinish(): void
@@ -285,15 +285,18 @@ class BunnyStreamProviderTest extends TestCase
 
     private function createHandlerStack(Response|ConnectException ...$responses): HandlerStack
     {
-        $stack = HandlerStack::create(new MockHandler($responses));
-        $stack->push(Middleware::history($this->history));
+        $stack = HandlerStack::create(new MockHandler(array_values($responses)));
+        $stack->push(Middleware::mapRequest(function (RequestInterface $request): RequestInterface {
+            $this->requests[] = $request;
+            return $request;
+        }));
 
         return $stack;
     }
 
     private function getRequest(int $index): RequestInterface
     {
-        return $this->history[$index]['request'] ?? self::fail("No request #$index");
+        return $this->requests[$index] ?? self::fail("No request #$index");
     }
 
     /**
