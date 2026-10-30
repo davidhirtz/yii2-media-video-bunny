@@ -18,10 +18,11 @@ The bundle bootstraps itself through `extra.bootstrap` and configures the `video
 ## Setup
 
 Each installation gets a video library of its own, since Bunny calls one webhook URL per library. Create it with the
-account API key (Account settings → API key), which is used once and never stored:
+account API key (Account settings → API key), which is used once and never stored. The command asks for it without
+echo, so it stays out of the shell history; `VIDEO_STREAM_ACCOUNT_KEY` or `--account-key` pass it unattended:
 
 ```bash
-./yii video-stream/setup --account-key=…
+./yii video-stream/setup
 ```
 
 The command creates a library named after the application (`--name` for another), points its webhook at
@@ -69,4 +70,6 @@ reach, a local one for instance, sets `submitByUrl` to `false` and uploads with 
   `./yii video-stream/submit --all` encodes them in the new one, the local file playing until each is ready. The stage
   library keeps its videos until it is deleted.
 - `registerWebhook()` is not supported: Bunny sets a library's webhook with the account key, which `setup` has.
+- Bunny limits the fetch jobs queued per library (`429`). A refused video stays `pending` and `video-stream/submit`
+  stops, so after a copy `submit --all` runs again until every video went through.
 - Bunny's fetch answers the new video's `id`, which its API reference does not document.

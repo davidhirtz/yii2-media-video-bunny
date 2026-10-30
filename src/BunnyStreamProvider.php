@@ -77,6 +77,13 @@ class BunnyStreamProvider extends BaseObject implements ProvisionableStreamProvi
 
         try {
             $id = $url !== null ? $this->fetch($url, $title) : $this->upload($file, $title);
+        } catch (ClientException $exception) {
+            // Bunny limits the fetch jobs queued per library, which `video-stream/submit --all` reaches after a copy.
+            if ($exception->getResponse()->getStatusCode() === 429) {
+                return new StreamState(self::NAME, null, StreamStatus::Pending, 'Bunny Stream is busy');
+            }
+
+            return StreamState::failed(self::NAME, $exception->getMessage());
         } catch (Exception $exception) {
             return StreamState::failed(self::NAME, $exception->getMessage());
         }

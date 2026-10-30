@@ -86,6 +86,16 @@ class BunnyStreamProviderTest extends TestCase
         self::assertNull($state->id);
     }
 
+    public function testSubmitLeavesTheVideoPendingWhileBunnyIsBusy(): void
+    {
+        $provider = $this->createProvider(new Response(429, [], self::json(['success' => false, 'message' => 'Too many fetch jobs queued'])));
+        $state = $provider->submit($this->buildVideo(), 'https://www.example.com/clip.mp4', '');
+
+        self::assertSame(StreamStatus::Pending, $state->status);
+        self::assertNull($state->id);
+        self::assertSame('Bunny Stream is busy', $state->error);
+    }
+
     public function testSubmitFailsOnAConnectionError(): void
     {
         $provider = $this->createProvider(new ConnectException('Connection refused', new Psr7Request('POST', 'https://video.bunnycdn.com')));
