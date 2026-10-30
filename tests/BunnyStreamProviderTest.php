@@ -127,13 +127,31 @@ class BunnyStreamProviderTest extends TestCase
         self::assertSame('Mu\u{308}ller video bytes', (string)$upload->getBody());
     }
 
-    public function testSubmitFailsWhenTheFileCannotBeRead(): void
+    public function testSubmitFailsWhenTheFileCannotBeReadAndCreatesNothing(): void
     {
-        $provider = $this->createProvider(new Response(200, [], self::json(['guid' => self::GUID])));
-        $state = $provider->submit($this->buildVideo(), null, '');
+        $state = $this->createProvider()->submit($this->buildVideo(), null, '');
 
         self::assertSame(StreamStatus::Failed, $state->status);
         self::assertSame('The file clip.mp4 cannot be read', $state->error);
+        self::assertSame([], $this->requests);
+    }
+
+    public function testAFailedUploadDeletesTheVideoItCreated(): void
+    {
+        $file = $this->buildVideo();
+        file_put_contents($file->getFilePath(), 'video bytes');
+
+        $provider = $this->createProvider(
+            new Response(200, [], self::json(['guid' => self::GUID])),
+            new Response(503),
+            new Response(200, [], self::json(['success' => true])),
+        );
+
+        $state = $provider->submit($file, null, '');
+
+        self::assertSame(StreamStatus::Failed, $state->status);
+        self::assertSame('DELETE', $this->getRequest(2)->getMethod());
+        self::assertSame('https://video.bunnycdn.com/library/42/videos/' . self::GUID, (string)$this->getRequest(2)->getUri());
     }
 
     /**

@@ -14,6 +14,7 @@ use Hirtz\Media\Video\Streaming\ProvisionableStreamProviderInterface;
 use Hirtz\Media\Video\Streaming\StreamState;
 use Hirtz\Media\Video\Streaming\StreamStatus;
 use Override;
+use Yii;
 use yii\base\BaseObject;
 use yii\base\NotSupportedException;
 use yii\web\Request;
@@ -232,8 +233,18 @@ class BunnyStreamProvider extends BaseObject implements ProvisionableStreamProvi
         return $id;
     }
 
+    /**
+     * Opened before the video is created, and the video deleted when the bytes do not arrive: an empty video whose id
+     * no state holds could never be deleted.
+     */
     protected function upload(File $file, string $title): string
     {
+        $stream = @fopen($file->getFilePath(), 'rb');
+
+        if ($stream === false) {
+            throw new Exception("The file {$file->getFilename()} cannot be read");
+        }
+
         $video = $this->request('POST', "/library/$this->libraryId/videos", [
             'json' => ['title' => $title],
         ]);
@@ -244,17 +255,21 @@ class BunnyStreamProvider extends BaseObject implements ProvisionableStreamProvi
             throw new Exception('Bunny Stream answered no video id');
         }
 
-        $stream = @fopen($file->getFilePath(), 'rb');
+        try {
+            $this->request('PUT', "/library/$this->libraryId/videos/$id", [
+                'body' => $stream,
+                'timeout' => $this->uploadTimeout,
+                'headers' => ['Content-Type' => 'application/octet-stream'],
+            ]);
+        } catch (GuzzleException $exception) {
+            try {
+                $this->request('DELETE', "/library/$this->libraryId/videos/$id");
+            } catch (GuzzleException $deleteException) {
+                Yii::error($deleteException, __METHOD__);
+            }
 
-        if ($stream === false) {
-            throw new Exception("The file {$file->getFilename()} cannot be read");
+            throw $exception;
         }
-
-        $this->request('PUT', "/library/$this->libraryId/videos/$id", [
-            'body' => $stream,
-            'timeout' => $this->uploadTimeout,
-            'headers' => ['Content-Type' => 'application/octet-stream'],
-        ]);
 
         return $id;
     }
