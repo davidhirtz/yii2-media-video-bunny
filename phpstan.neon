@@ -1,0 +1,18 @@
+parameters:
+    dynamicConstantNames:
+        - YII_DEBUG
+        - YII_ENV
+        - YII_ENV_DEV
+        - YII_ENV_PROD
+        - YII_ENV_TEST
+
+    level: 7
+
+    paths:
+        - src
+        - tests
+
+    scanFiles:
+        - %rootDir%/../../../vendor/davidhirtz/yii2-skeleton/Yii.php
+        # YII_DEBUG and friends are defined here, and PHPStan only knows a constant from a file it scans
+        - %rootDir%/../../../vendor/yiisoft/yii2/BaseYii.php

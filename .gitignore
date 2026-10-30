@@ -1,0 +1,12 @@
+# Development
+node_modules
+vendor
+.idea
+
+# Yii
+runtime
+
+# OS cache files
+Thumbs.db
+.DS_Store
+/composer.lock
