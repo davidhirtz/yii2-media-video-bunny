@@ -96,13 +96,37 @@ class BunnyStreamProviderTest extends TestCase
         self::assertSame('Bunny Stream is busy', $state->error);
     }
 
-    public function testSubmitFailsOnAConnectionError(): void
+    /**
+     * @return array<string, array{Response|ConnectException}>
+     */
+    public static function unavailableProvider(): array
     {
-        $provider = $this->createProvider(new ConnectException('Connection refused', new Psr7Request('POST', 'https://video.bunnycdn.com')));
-        $state = $provider->submit($this->buildVideo(), 'https://www.example.com/clip.mp4', '');
+        return [
+            'connection refused' => [new ConnectException('Connection refused', new Psr7Request('POST', 'https://video.bunnycdn.com'))],
+            'server error' => [new Response(503)],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('unavailableProvider')]
+    public function testSubmitLeavesTheVideoPendingWhileBunnyIsUnavailable(Response|ConnectException $response): void
+    {
+        $state = $this->createProvider($response)->submit($this->buildVideo(), 'https://www.example.com/clip.mp4', '');
+
+        self::assertSame(StreamStatus::Pending, $state->status);
+        self::assertNull($state->id);
+        self::assertSame('Bunny Stream is unavailable', $state->error);
+    }
+
+    public function testSubmitFailsOnARefusedRequest(): void
+    {
+        $state = $this->createProvider(new Response(422, [], self::json(['success' => false, 'message' => 'Origin returned HTTP 401 (Unauthorized).'])))->submit($this->buildVideo(), 'https://stage.example.com/clip.mp4', '');
 
         self::assertSame(StreamStatus::Failed, $state->status);
-        self::assertSame('Connection refused', $state->error);
+        self::assertSame('Origin returned HTTP 401 (Unauthorized).', $state->error);
+
+        $state = $this->createProvider(new Response(400, [], 'Bad request'))->submit($this->buildVideo(), 'https://stage.example.com/clip.mp4', '');
+
+        self::assertStringContainsString('400 Bad Request', (string)$state->error);
     }
 
     public function testSubmitWithoutUrlCreatesTheVideoAndUploadsTheBytes(): void
@@ -149,7 +173,8 @@ class BunnyStreamProviderTest extends TestCase
 
         $state = $provider->submit($file, null, '');
 
-        self::assertSame(StreamStatus::Failed, $state->status);
+        self::assertSame(StreamStatus::Pending, $state->status);
+        self::assertNull($state->id);
         self::assertSame('DELETE', $this->getRequest(2)->getMethod());
         self::assertSame('https://video.bunnycdn.com/library/42/videos/' . self::GUID, (string)$this->getRequest(2)->getUri());
     }
@@ -213,6 +238,25 @@ class BunnyStreamProviderTest extends TestCase
 
         $this->expectException(ServerException::class);
         $provider->delete($this->createState());
+    }
+
+    public function testGetVideosReadsEveryPage(): void
+    {
+        $page = static fn (int $from, int $count): array => array_map(
+            static fn (int $i): array => ['guid' => sprintf('00000000-0000-0000-0000-%012d', $i), 'dateUploaded' => '2026-10-30T06:36:57.123'],
+            range($from, $from + $count - 1),
+        );
+
+        $provider = $this->createProvider(
+            new Response(200, [], self::json(['totalItems' => 150, 'items' => $page(1, 100)])),
+            new Response(200, [], self::json(['totalItems' => 150, 'items' => $page(101, 50)])),
+        );
+
+        $videos = iterator_to_array($provider->getVideos());
+
+        self::assertCount(150, $videos);
+        self::assertSame('2026-10-30T06:36:57+00:00', $videos['00000000-0000-0000-0000-000000000150']?->format(DATE_ATOM));
+        self::assertSame('https://video.bunnycdn.com/library/42/videos?page=2&itemsPerPage=100&orderBy=date', (string)$this->getRequest(1)->getUri());
     }
 
     public function testThePlaybackUrlsAndTheContentSecurityPolicyNameTheCdnHost(): void

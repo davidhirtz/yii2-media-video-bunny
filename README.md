@@ -49,8 +49,9 @@ set the webhook URL there.
 | `uploadTimeout` | `3600` | Seconds for uploading a file's bytes |
 
 The `videoStream` component's own options (`submitByUrl`, `webhookEnabled`) are media-video's. A host Bunny cannot
-reach, a local one for instance, sets `submitByUrl` to `false` and uploads with `video-stream/submit`, and polls with
-`video-stream/refresh` instead of webhooks.
+reach, a local one or a stage host behind basic auth or a VPN, sets `submitByUrl` to `false` and uploads with
+`video-stream/submit`, and polls with `video-stream/refresh` instead of webhooks. Bunny refuses a URL it cannot fetch at
+once ("DNS resolution failed.", "Origin returned HTTP 401 (Unauthorized)."), which the admin shows as the failed stream.
 
 ## Behaviour
 
@@ -70,6 +71,8 @@ reach, a local one for instance, sets `submitByUrl` to `false` and uploads with 
   `./yii video-stream/submit --all` encodes them in the new one, the local file playing until each is ready. The stage
   library keeps its videos until it is deleted.
 - `registerWebhook()` is not supported: Bunny sets a library's webhook with the account key, which `setup` has.
-- Bunny limits the fetch jobs queued per library (`429`). A refused video stays `pending` and `video-stream/submit`
-  stops, so after a copy `submit --all` runs again until every video went through.
+- `./yii video-stream/orphans` lists the library's videos no file holds (older than an hour); `--delete` deletes them.
+- Bunny limits the fetch jobs queued per library (`429`). A refused video, and one submitted while Bunny answers `5xx` or
+  does not answer, stays `pending` and `video-stream/submit` stops, so after a copy `submit --all` runs again until every
+  video went through; `submit --failed` resubmits the videos that failed.
 - Bunny's fetch answers the new video's `id`, which its API reference does not document.

@@ -4,12 +4,17 @@ declare(strict_types=1);
 
 namespace Hirtz\Media\Video\Bunny;
 
+use DateTimeImmutable;
+use DateTimeZone;
 use Exception;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
+use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\Exception\ServerException;
 use GuzzleHttp\HandlerStack;
 use Hirtz\Media\Models\File;
+use Hirtz\Media\Video\Streaming\ListableStreamProviderInterface;
 use Hirtz\Media\Video\Streaming\ProvisionableStreamProviderInterface;
 use Hirtz\Media\Video\Streaming\StreamState;
 use Hirtz\Media\Video\Streaming\StreamStatus;
@@ -19,7 +24,7 @@ use yii\base\BaseObject;
 use yii\base\NotSupportedException;
 use yii\web\Request;
 
-class BunnyStreamProvider extends BaseObject implements ProvisionableStreamProviderInterface
+class BunnyStreamProvider extends BaseObject implements ListableStreamProviderInterface, ProvisionableStreamProviderInterface
 {
     final public const string NAME = 'bunny';
 
@@ -80,11 +85,13 @@ class BunnyStreamProvider extends BaseObject implements ProvisionableStreamProvi
             $id = $url !== null ? $this->fetch($url, $title) : $this->upload($file, $title);
         } catch (ClientException $exception) {
             // Bunny limits the fetch jobs queued per library, which `video-stream/submit --all` reaches after a copy.
-            if ($exception->getResponse()->getStatusCode() === 429) {
+            if (in_array($exception->getResponse()->getStatusCode(), [408, 429], true)) {
                 return new StreamState(self::NAME, null, StreamStatus::Pending, 'Bunny Stream is busy');
             }
 
-            return StreamState::failed(self::NAME, $exception->getMessage());
+            return StreamState::failed(self::NAME, $this->getErrorMessage($exception));
+        } catch (ServerException|ConnectException) {
+            return new StreamState(self::NAME, null, StreamStatus::Pending, 'Bunny Stream is unavailable');
         } catch (Exception $exception) {
             return StreamState::failed(self::NAME, $exception->getMessage());
         }
@@ -126,6 +133,33 @@ class BunnyStreamProvider extends BaseObject implements ProvisionableStreamProvi
                 throw $exception;
             }
         }
+    }
+
+    /**
+     * Bunny answers `dateUploaded` in UTC without a zone.
+     */
+    #[Override]
+    public function getVideos(): iterable
+    {
+        $utc = new DateTimeZone('UTC');
+        $page = 1;
+
+        do {
+            $answer = $this->request('GET', "/library/$this->libraryId/videos", [
+                'query' => ['page' => $page, 'itemsPerPage' => 100, 'orderBy' => 'date'],
+            ]);
+
+            $items = is_array($answer['items'] ?? null) ? $answer['items'] : [];
+
+            foreach ($items as $item) {
+                if (is_array($item) && is_string($item['guid'] ?? null)) {
+                    $date = $item['dateUploaded'] ?? null;
+                    yield $item['guid'] => is_string($date) ? new DateTimeImmutable($date, $utc) : null;
+                }
+            }
+
+            $total = is_int($answer['totalItems'] ?? null) ? $answer['totalItems'] : 0;
+        } while ($items && $page++ * 100 < $total);
     }
 
     #[Override]
@@ -272,6 +306,17 @@ class BunnyStreamProvider extends BaseObject implements ProvisionableStreamProvi
         }
 
         return $id;
+    }
+
+    /**
+     * Bunny's own `message` ("Origin returned HTTP 401 (Unauthorized)."), rather than Guzzle's request dump.
+     */
+    protected function getErrorMessage(ClientException $exception): string
+    {
+        $answer = json_decode((string)$exception->getResponse()->getBody(), true);
+        $message = is_array($answer) ? ($answer['message'] ?? null) : null;
+
+        return is_string($message) && $message !== '' ? $message : $exception->getMessage();
     }
 
     /**
