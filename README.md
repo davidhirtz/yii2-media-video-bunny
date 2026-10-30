@@ -64,5 +64,9 @@ reach, a local one for instance, sets `submitByUrl` to `false` and uploads with 
   `img-src`, plus `blob:` in `media-src`.
 - A new library blocks requests without a `Referer`. The skeleton's `strict-origin-when-cross-origin` sends one; a page
   with `Referrer-Policy: no-referrer` cannot play the stream.
+- **Stage to production**: Bunny cannot copy a library. A production installation created from a copy of the stage
+  database gets its own library from `video-stream/setup`, which counts the videos streamed in the stage library;
+  `./yii video-stream/submit --all` encodes them in the new one, the local file playing until each is ready. The stage
+  library keeps its videos until it is deleted.
 - `registerWebhook()` is not supported: Bunny sets a library's webhook with the account key, which `setup` has.
 - Bunny's fetch answers the new video's `id`, which its API reference does not document.

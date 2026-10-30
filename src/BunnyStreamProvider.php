@@ -52,6 +52,15 @@ class BunnyStreamProvider extends BaseObject implements ProvisionableStreamProvi
         return self::NAME;
     }
 
+    /**
+     * The library: a database copied to another installation keeps the video ids of the library it came from.
+     */
+    #[Override]
+    public function getScope(): string
+    {
+        return (string)$this->libraryId;
+    }
+
     #[Override]
     public function isProvisioned(): bool
     {

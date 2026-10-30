@@ -48,6 +48,11 @@ class BunnyStreamProviderTest extends TestCase
         parent::tearDown();
     }
 
+    public function testTheScopeIsTheLibrary(): void
+    {
+        self::assertSame('42', $this->createProvider()->getScope());
+    }
+
     public function testIsProvisionedNeedsAllThreeParams(): void
     {
         self::assertTrue($this->createProvider()->isProvisioned());
